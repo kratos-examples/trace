@@ -112,7 +112,7 @@ Code differences compared to source project.
 +	// 直接连接 demo1kratos 的 HTTP 端口，trace ID 会通过 HTTP header 跨服务传播
 +	client := rese.P1(http.NewClient(
 +		context.Background(),
-+		http.WithEndpoint("http://127.0.0.1:8000"),
++		http.WithEndpoint("http://127.0.0.1:8001"),
 +		http.WithMiddleware(func(handler middleware.Handler) middleware.Handler {
 +			LOG.Infof("handle http request in middleware")
 +			return func(ctx context.Context, req any) (any, error) {
