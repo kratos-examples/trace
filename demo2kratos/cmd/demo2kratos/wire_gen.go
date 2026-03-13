@@ -23,12 +23,14 @@ func wireApp(confServer *conf.Server, confData *conf.Data, logger log.Logger) (*
 	if err != nil {
 		return nil, nil, err
 	}
-	articleUsecase := biz.NewArticleUsecase(dataData, logger)
+	demo1HttpClient, cleanup2 := data.NewDemo1HttpClient(logger)
+	articleUsecase := biz.NewArticleUsecase(dataData, demo1HttpClient, logger)
 	articleService := service.NewArticleService(articleUsecase, logger)
 	grpcServer := server.NewGRPCServer(confServer, articleService, logger)
 	httpServer := server.NewHTTPServer(confServer, articleService, logger)
 	app := newApp(logger, grpcServer, httpServer)
 	return app, func() {
+		cleanup2()
 		cleanup()
 	}, nil
 }

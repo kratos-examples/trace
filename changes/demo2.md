@@ -2,18 +2,137 @@
 
 Code differences compared to source project.
 
-## cmd/demo2kratos/wire_gen.go (+1 -1)
+## cmd/demo2kratos/wire_gen.go (+4 -2)
 
 ```diff
-@@ -24,7 +24,7 @@
+@@ -23,12 +23,14 @@
+ 	if err != nil {
  		return nil, nil, err
  	}
- 	articleUsecase := biz.NewArticleUsecase(dataData, logger)
+-	articleUsecase := biz.NewArticleUsecase(dataData, logger)
 -	articleService := service.NewArticleService(articleUsecase)
++	demo1HttpClient, cleanup2 := data.NewDemo1HttpClient(logger)
++	articleUsecase := biz.NewArticleUsecase(dataData, demo1HttpClient, logger)
 +	articleService := service.NewArticleService(articleUsecase, logger)
  	grpcServer := server.NewGRPCServer(confServer, articleService, logger)
  	httpServer := server.NewHTTPServer(confServer, articleService, logger)
  	app := newApp(logger, grpcServer, httpServer)
+ 	return app, func() {
++		cleanup2()
+ 		cleanup()
+ 	}, nil
+ }
+```
+
+## internal/biz/article.go (+14 -4)
+
+```diff
+@@ -6,6 +6,7 @@
+ 	"github.com/brianvoe/gofakeit/v7"
+ 	"github.com/go-kratos/kratos/v2/log"
+ 	"github.com/yylego/kratos-ebz/ebzkratos"
++	demo1student "github.com/yylego/kratos-examples/demo1kratos/api/student"
+ 	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
+ 	"github.com/yylego/kratos-examples/demo2kratos/internal/data"
+ )
+@@ -18,12 +19,13 @@
+ }
+ 
+ type ArticleUsecase struct {
+-	data *data.Data
+-	log  *log.Helper
++	data            *data.Data
++	demo1HttpClient *data.Demo1HttpClient
++	log             *log.Helper
+ }
+ 
+-func NewArticleUsecase(data *data.Data, logger log.Logger) *ArticleUsecase {
+-	return &ArticleUsecase{data: data, log: log.NewHelper(logger)}
++func NewArticleUsecase(data *data.Data, demo1HttpClient *data.Demo1HttpClient, logger log.Logger) *ArticleUsecase {
++	return &ArticleUsecase{data: data, demo1HttpClient: demo1HttpClient, log: log.NewHelper(logger)}
+ }
+ 
+ func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Article, *ebzkratos.Ebz) {
+@@ -31,6 +33,14 @@
+ 	if err := gofakeit.Struct(&res); err != nil {
+ 		return nil, ebzkratos.New(pb.ErrorArticleCreateFailure("fake: %v", err))
+ 	}
++	// 跨服务调用 demo1kratos，trace ID 会通过 HTTP header 传播
++	resp, err := uc.demo1HttpClient.GetStudentClient().CreateStudent(ctx, &demo1student.CreateStudentRequest{
++		Name: res.Title,
++	})
++	if err != nil {
++		return nil, ebzkratos.New(pb.ErrorServerError("http: %v", err))
++	}
++	res.Title = "message:[http-resp:" + resp.GetStudent().GetName() + "]"
+ 	return &res, nil
+ }
+ 
+```
+
+## internal/data/data.go (+1 -1)
+
+```diff
+@@ -10,7 +10,7 @@
+ 	"gorm.io/gorm"
+ )
+ 
+-var ProviderSet = wire.NewSet(NewData)
++var ProviderSet = wire.NewSet(NewData, NewDemo1HttpClient)
+ 
+ type Data struct {
+ 	db *gorm.DB
+```
+
+## internal/data/demo1_http_client.go (+45 -0)
+
+```diff
+@@ -0,0 +1,45 @@
++package data
++
++import (
++	"context"
++
++	"github.com/go-kratos/kratos/v2/log"
++	"github.com/go-kratos/kratos/v2/middleware"
++	"github.com/go-kratos/kratos/v2/transport/http"
++	demo1student "github.com/yylego/kratos-examples/demo1kratos/api/student"
++	"github.com/yylego/must"
++	"github.com/yylego/rese"
++)
++
++type Demo1HttpClient struct {
++	client        *http.Client
++	studentClient demo1student.StudentServiceHTTPClient
++}
++
++func NewDemo1HttpClient(logger log.Logger) (*Demo1HttpClient, func()) {
++	LOG := log.NewHelper(logger)
++
++	// 直接连接 demo1kratos 的 HTTP 端口，trace ID 会通过 HTTP header 跨服务传播
++	client := rese.P1(http.NewClient(
++		context.Background(),
++		http.WithEndpoint("http://127.0.0.1:8000"),
++		http.WithMiddleware(func(handler middleware.Handler) middleware.Handler {
++			LOG.Infof("handle http request in middleware")
++			return func(ctx context.Context, req any) (any, error) {
++				return handler(ctx, req)
++			}
++		}),
++	))
++	studentClient := demo1student.NewStudentServiceHTTPClient(client)
++	cleanup := func() {
++		must.Done(client.Close())
++	}
++	return &Demo1HttpClient{
++		client:        client,
++		studentClient: studentClient,
++	}, cleanup
++}
++
++func (c *Demo1HttpClient) GetStudentClient() demo1student.StudentServiceHTTPClient {
++	return c.studentClient
++}
 ```
 
 ## internal/server/http.go (+26 -0)

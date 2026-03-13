@@ -9,6 +9,7 @@ require (
 	github.com/google/wire v0.7.0
 	github.com/yylego/done v0.0.0
 	github.com/yylego/kratos-ebz v0.0.0
+	github.com/yylego/kratos-examples/demo1kratos v0.0.1
 	github.com/yylego/kratos-trace v0.0.0
 	github.com/yylego/must v0.0.0
 	github.com/yylego/rese v0.0.0
@@ -48,3 +49,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260311181403-84a4fc48630c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/yylego/kratos-examples/demo1kratos => ../demo1kratos

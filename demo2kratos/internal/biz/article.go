@@ -6,6 +6,7 @@ import (
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/yylego/kratos-ebz/ebzkratos"
+	demo1student "github.com/yylego/kratos-examples/demo1kratos/api/student"
 	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
 	"github.com/yylego/kratos-examples/demo2kratos/internal/data"
 )
@@ -18,12 +19,13 @@ type Article struct {
 }
 
 type ArticleUsecase struct {
-	data *data.Data
-	log  *log.Helper
+	data            *data.Data
+	demo1HttpClient *data.Demo1HttpClient
+	log             *log.Helper
 }
 
-func NewArticleUsecase(data *data.Data, logger log.Logger) *ArticleUsecase {
-	return &ArticleUsecase{data: data, log: log.NewHelper(logger)}
+func NewArticleUsecase(data *data.Data, demo1HttpClient *data.Demo1HttpClient, logger log.Logger) *ArticleUsecase {
+	return &ArticleUsecase{data: data, demo1HttpClient: demo1HttpClient, log: log.NewHelper(logger)}
 }
 
 func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Article, *ebzkratos.Ebz) {
@@ -31,6 +33,14 @@ func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Artic
 	if err := gofakeit.Struct(&res); err != nil {
 		return nil, ebzkratos.New(pb.ErrorArticleCreateFailure("fake: %v", err))
 	}
+	// 跨服务调用 demo1kratos，trace ID 会通过 HTTP header 传播
+	resp, err := uc.demo1HttpClient.GetStudentClient().CreateStudent(ctx, &demo1student.CreateStudentRequest{
+		Name: res.Title,
+	})
+	if err != nil {
+		return nil, ebzkratos.New(pb.ErrorServerError("http: %v", err))
+	}
+	res.Title = "message:[http-resp:" + resp.GetStudent().GetName() + "]"
 	return &res, nil
 }
 
