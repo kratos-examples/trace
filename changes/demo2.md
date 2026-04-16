@@ -2,6 +2,27 @@
 
 Code differences compared to source project.
 
+## cmd/demo2kratos/main.go (+2 -0)
+
+```diff
+@@ -13,6 +13,7 @@
+ 	"github.com/go-kratos/kratos/v2/transport/http"
+ 	"github.com/yylego/done"
+ 	"github.com/yylego/kratos-examples/demo2kratos/internal/conf"
++	"github.com/yylego/kratos-trace/tracekratos"
+ 	"github.com/yylego/must"
+ 	"github.com/yylego/rese"
+ )
+@@ -55,6 +56,7 @@
+ 		"service.version", Version,
+ 		"trace.id", tracing.TraceID(),
+ 		"span.id", tracing.SpanID(),
++		"request-trace", tracekratos.LogTraceID(), // 我们自己的 trace ID，与官方 trace.id 并行
+ 	)
+ 	c := config.New(
+ 		config.WithSource(
+```
+
 ## cmd/demo2kratos/wire_gen.go (+4 -2)
 
 ```diff
@@ -34,8 +55,8 @@ Code differences compared to source project.
 +	demo1student "github.com/yylego/kratos-examples/demo1kratos/api/student"
  	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
  	"github.com/yylego/kratos-examples/demo2kratos/internal/data"
- )
-@@ -18,12 +19,13 @@
+ 	"github.com/yylego/must"
+@@ -19,12 +20,13 @@
  }
  
  type ArticleUsecase struct {
@@ -53,7 +74,7 @@ Code differences compared to source project.
  }
  
  func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Article, *ebzkratos.Ebz) {
-@@ -31,6 +33,14 @@
+@@ -34,6 +36,14 @@
  	if err := gofakeit.Struct(&res); err != nil {
  		return nil, ebzkratos.New(pb.ErrorArticleCreateFailure("fake: %v", err))
  	}
@@ -226,8 +247,8 @@ Code differences compared to source project.
 +	traceID := tracekratos.GetTraceID(ctx)
 +	s.log.WithContext(ctx).Infof("Processing request with trace ID: %s", traceID)
 +
- 	v, ebz := s.uc.CreateArticle(ctx, nil)
- 	if ebz != nil {
- 		return nil, ebz.Erk
+ 	if req.Title == "" {
+ 		return nil, pb.ErrorBadParam("TITLE IS REQUIRED")
+ 	}
 ```
 

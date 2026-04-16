@@ -2,6 +2,27 @@
 
 Code differences compared to source project.
 
+## cmd/demo1kratos/main.go (+2 -0)
+
+```diff
+@@ -13,6 +13,7 @@
+ 	"github.com/go-kratos/kratos/v2/transport/http"
+ 	"github.com/yylego/done"
+ 	"github.com/yylego/kratos-examples/demo1kratos/internal/conf"
++	"github.com/yylego/kratos-trace/tracekratos"
+ 	"github.com/yylego/must"
+ 	"github.com/yylego/rese"
+ )
+@@ -55,6 +56,7 @@
+ 		"service.version", Version,
+ 		"trace.id", tracing.TraceID(),
+ 		"span.id", tracing.SpanID(),
++		"request-trace", tracekratos.LogTraceID(), // 我们自己的 trace ID，与官方 trace.id 并行
+ 	)
+ 	c := config.New(
+ 		config.WithSource(
+```
+
 ## cmd/demo1kratos/wire_gen.go (+1 -1)
 
 ```diff
@@ -107,8 +128,8 @@ Code differences compared to source project.
 +	traceID := tracekratos.GetTraceID(ctx)
 +	s.log.WithContext(ctx).Infof("Processing request with trace ID: %s", traceID)
 +
- 	v, ebz := s.uc.CreateStudent(ctx, nil)
- 	if ebz != nil {
- 		return nil, ebz.Erk
+ 	if req.Name == "" {
+ 		return nil, pb.ErrorBadParam("NAME IS REQUIRED")
+ 	}
 ```
 
