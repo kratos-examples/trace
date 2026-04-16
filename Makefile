@@ -217,11 +217,19 @@ source-round1-step7:
 # 轮次1步骤8: 推送 main（第一次推送）
 source-round1-step8:
 	git push origin main
-	@echo "✅ 第一次推送完成，请等待 CI 通过"
+	@echo "✅ 第一次推送完成，请等待 CI 通过后再执行 step9"
 
-# Round 1 Step 9: Tag sub-modules only
-# 轮次1步骤9: 只给子模块打标签
+# Round 1 Step 9: Wait for CI to pass
+# 轮次1步骤9: 等待 CI 通过
 source-round1-step9:
+	# 查看最新 run ID，然后用 gh run watch 等待
+	gh run list --limit 2
+	@echo "请执行: gh run watch <run-id> --exit-status"
+	@echo "等待 CI 通过后再执行 step10 打子模块标签"
+
+# Round 1 Step 10: Tag sub-modules only
+# 轮次1步骤10: 只给子模块打标签
+source-round1-step10:
 	# 进入子模块目录分别打标签
 	# tago bump sub-module -b=100 会基于子模块前缀自动递增版本（如 demo1kratos/v0.0.X），-b=100 表示免确认直接执行
 	cd demo1kratos && tago bump sub-module -b=100
@@ -285,11 +293,18 @@ source-round2-step5:
 # 轮次2步骤6: 推送 main（第二次推送）
 source-round2-step6:
 	git push origin main
-	@echo "✅ 第二次推送完成，请等待 CI 通过"
+	@echo "✅ 第二次推送完成，请等待 CI 通过后再执行 step7"
 
-# Round 2 Step 7: Tag root module
-# 轮次2步骤7: 给根模块打标签
+# Round 2 Step 7: Wait for CI to pass
+# 轮次2步骤7: 等待 CI 通过
 source-round2-step7:
+	gh run list --limit 2
+	@echo "请执行: gh run watch <run-id> --exit-status"
+	@echo "等待 CI 通过后再执行 step8 打根模块标签"
+
+# Round 2 Step 8: Tag root module
+# 轮次2步骤8: 给根模块打标签
+source-round2-step8:
 	# 根模块打标签（如 v0.0.X），-b=100 表示免确认直接执行
 	tago bump main -b=100
 	@echo "✅ 根模块标签已打并推送"
