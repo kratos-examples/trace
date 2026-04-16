@@ -53,13 +53,16 @@ The following projects are forked from kratos-examples, each demonstrating diffe
 |     ebz     |     https://github.com/kratos-examples/ebz     |
 |    cobra    |    https://github.com/kratos-examples/cobra    |
 |    gorm     |    https://github.com/kratos-examples/gorm     |
+|  gormzhcn   |  https://github.com/kratos-examples/gormzhcn   |
 |    cors     |    https://github.com/kratos-examples/cors     |
 |    i18n     |    https://github.com/kratos-examples/i18n     |
 |    nacos    |    https://github.com/kratos-examples/nacos    |
+| rate-limit  | https://github.com/kratos-examples/rate-limit  |
 |   swaggo    |   https://github.com/kratos-examples/swaggo    |
 |    trace    |    https://github.com/kratos-examples/trace    |
 |    test     |    https://github.com/kratos-examples/test     |
 |    vue3     |    https://github.com/kratos-examples/vue3     |
+|  vue3zhcn   |  https://github.com/kratos-examples/vue3zhcn   |
 |    wire     |    https://github.com/kratos-examples/wire     |
 |     zap     |     https://github.com/kratos-examples/zap     |
 |    zapzh    |    https://github.com/kratos-examples/zapzh    |
@@ -110,6 +113,59 @@ Provides complete automated workflow to sync fork projects with upstream changes
 Through `make merge-stepN` series commands, auto handles upstream code merging, conflict resolution, dependencies upgrades, test validation, and more.
 
 See [Makefile](./Makefile) with detailed workflow and usage instructions.
+
+## Upgrade Workflow
+
+The ecosystem uses a **two-stage upgrade scheme**: upstream (this project) → downstream (20+ fork projects).
+
+### Stage 1: Upgrade the Upstream (This Project)
+
+This project is a **multi-module repo** with a root module plus two sub-modules (`demo1kratos`, `demo2kratos`). Sub-modules must be tagged first, then root can reference the new sub-module tags, so upgrade is split into two rounds:
+
+```bash
+# Round 1: upgrade and tag SUB-MODULES
+make source-round1-step1
+make source-round1-step2
+# ... run each source-round1-stepN in sequence
+
+# Pause, make sure CI passes and go module cache picks up the new sub-module tags, then:
+
+# Round 2: upgrade and tag ROOT module
+make source-round2-step1
+make source-round2-step2
+# ... run each source-round2-stepN in sequence
+```
+
+Each step prints a brief description when executed. Check the [Makefile](./Makefile) to see each step's specifics.
+
+**Important**: Once tagged, downstream fork projects can pick up the changes via Stage 2.
+
+### Stage 2: Sync Downstream Fork Projects
+
+In each fork project (e.g. [kratos-examples/trace](https://github.com/kratos-examples/trace)), run the Makefile `merge-step*` series in sequence to sync with this upstream:
+
+```bash
+make merge-step1
+make merge-step2
+# ... run each merge-stepN in sequence
+```
+
+Common flow:
+
+- Opening steps handle code sync (git merge) — resolve conflicts on own (often in `go.mod` / `go.sum`)
+- Middle steps handle dep upgrades, code regeneration, tests, and lint
+- Closing step restores on-disk changes stashed before
+
+Check the fork project's [Makefile](./Makefile) to see each step's specifics.
+
+### Two-Stage Design
+
+- **Upstream** is the template — holds the common Kratos skeleton and toolchain
+- **Downstream** forks each focus on one specific feature (trace, gorm, zap, i18n, ...)
+- Forks don't merge back to upstream — each one remains as a standalone example
+- Downstream pulls in upstream changes on a recurring cadence to keep in sync with the latest Kratos version
+
+This pattern lets users learn one specific feature at a time while ensuring each demo uses up-to-date framework code.
 
 ### Code Changes
 

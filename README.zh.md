@@ -53,13 +53,16 @@
 |     ebz     |     https://github.com/kratos-examples/ebz     |
 |    cobra    |    https://github.com/kratos-examples/cobra    |
 |    gorm     |    https://github.com/kratos-examples/gorm     |
+|  gormzhcn   |  https://github.com/kratos-examples/gormzhcn   |
 |    cors     |    https://github.com/kratos-examples/cors     |
 |    i18n     |    https://github.com/kratos-examples/i18n     |
 |    nacos    |    https://github.com/kratos-examples/nacos    |
+| rate-limit  | https://github.com/kratos-examples/rate-limit  |
 |   swaggo    |   https://github.com/kratos-examples/swaggo    |
 |    trace    |    https://github.com/kratos-examples/trace    |
 |    test     |    https://github.com/kratos-examples/test     |
 |    vue3     |    https://github.com/kratos-examples/vue3     |
+|  vue3zhcn   |  https://github.com/kratos-examples/vue3zhcn   |
 |    wire     |    https://github.com/kratos-examples/wire     |
 |     zap     |     https://github.com/kratos-examples/zap     |
 |    zapzh    |    https://github.com/kratos-examples/zapzh    |
@@ -110,6 +113,59 @@ make orz
 通过 `make merge-stepN` 系列命令，自动处理上游代码合并、冲突解决、依赖升级、测试验证等流程。
 
 详细工作流程和使用说明请查看 [Makefile](./Makefile)。
+
+## 升级流程
+
+整个生态采用 **两阶段升级方案**：上游（本项目）→ 下游（20+ 个 fork 项目）。
+
+### 第一阶段：升级上游（本项目）
+
+本项目是**多模块仓库**：根模块 + 两个子模块（`demo1kratos`、`demo2kratos`）。必须先给子模块打标签，根模块才能引用新的子模块标签，所以升级分两轮：
+
+```bash
+# 轮次 1：升级并发布 子模块
+make source-round1-step1
+make source-round1-step2
+# ... 按顺序执行每个 source-round1-stepN
+
+# 等 CI 通过、go 模块缓存已索引新子模块标签后，再：
+
+# 轮次 2：升级并发布 根模块
+make source-round2-step1
+make source-round2-step2
+# ... 按顺序执行每个 source-round2-stepN
+```
+
+每一步执行时会打印简短说明。具体细节见 [Makefile](./Makefile)。
+
+**重要**：打完标签后，下游所有 fork 项目都可以通过第二阶段同步这次的变更。
+
+### 第二阶段：同步下游 Fork 项目
+
+在每个 fork 项目（比如 [kratos-examples/trace](https://github.com/kratos-examples/trace)）里，按顺序执行 Makefile 的 `merge-step*` 系列命令同步上游：
+
+```bash
+make merge-step1
+make merge-step2
+# ... 按顺序执行每个 merge-stepN
+```
+
+通用流程：
+
+- 前几步处理代码同步（git merge）——冲突自行解决（通常在 `go.mod` / `go.sum`）
+- 中间几步处理依赖升级、代码重新生成、测试、代码检查
+- 最后一步恢复前面暂存的本地修改
+
+具体细节见 fork 项目的 [Makefile](./Makefile)。
+
+### 两阶段设计说明
+
+- **上游** 是模板——提供通用的 Kratos 骨架和工具链
+- **下游** 每个 fork 专注一个特定功能（trace、gorm、zap、i18n 等）
+- Fork 不会合并回上游——每个都作为独立示例长期存在
+- 下游按固定节奏拉取上游变更，保持与最新 Kratos 版本对齐
+
+这种模式让用户一次学一个特定功能，同时每个 demo 都使用最新的框架代码。
 
 ### 代码变更
 
