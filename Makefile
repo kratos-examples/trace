@@ -122,6 +122,195 @@ test-with-flags:
 # ========================================
 
 # ========================================
+# Upgrade Source Project (This Project) - Complete Workflow
+# 升级源项目（本项目）的完整流程
+# ========================================
+# Background:
+# This project is a MULTI-MODULE repo with root + 2 sub-modules (demo1kratos, demo2kratos).
+# The root module's go.mod references the sub-modules, which requires TWO INDEPENDENT ROUNDS:
+#
+#   Round 1 (source-round1-*): Upgrade and release SUB-MODULES only
+#   Round 2 (source-round2-*): Upgrade and release ROOT module only
+#
+# Sub-modules must be tagged FIRST so root can reference the new sub-module versions in Round 2.
+#
+# IMPORTANT: source-round*-* is DESIGNED FOR THE SOURCE PROJECT ONLY.
+# Fork projects should use merge-stepN series instead.
+#
+# 背景说明：
+# 本项目是 MULTI-MODULE 仓库，包含根模块 + 2 个子模块（demo1kratos, demo2kratos）。
+# 根模块的 go.mod 引用子模块，所以升级需要 两个独立的轮次：
+#
+#   轮次 1（source-round1-*）: 只升级并发布 子模块
+#   轮次 2（source-round2-*）: 只升级并发布 根模块
+#
+# 子模块必须先打标签，这样轮次 2 里根模块才能引用新的子模块版本。
+#
+# 重要：source-round*-* 专给源项目用，fork 项目请用 merge-stepN 系列。
+
+# ========================================
+# Round 1: Upgrade and Release SUB-MODULES (demo1kratos, demo2kratos)
+# 轮次 1: 升级并发布 子模块（demo1kratos, demo2kratos）
+# ========================================
+
+# Round 1 Step 1: Confirm current project is the source project
+# 轮次1步骤1: 确认当前是源项目
+source-round1-step1:
+	@ORIGIN_REPO=$$(git remote get-url origin 2>/dev/null || echo ""); \
+	if echo "$$ORIGIN_REPO" | grep -q "yylego/kratos-examples.git"; then \
+		echo "✅ 已确认当前是源项目，可以继续执行 source-round1-*"; \
+	else \
+		echo "❌ 错误: 当前不是源项目（yylego/kratos-examples）"; \
+		echo "   当前 origin: $$ORIGIN_REPO"; \
+		echo "   Fork 项目请使用 merge-stepN 系列命令"; \
+		exit 1; \
+	fi
+
+# Round 1 Step 2: Upgrade sub-module dependencies (demo1kratos, demo2kratos)
+# 轮次1步骤2: 升级子模块的依赖
+source-round1-step2:
+	# 只升级 demo1kratos 和 demo2kratos 的依赖，根模块暂时不管
+	cd $(CURDIR)/demo1kratos && (depbump || depbump update -D)
+	cd $(CURDIR)/demo2kratos && (depbump || depbump update -D)
+	@echo "✅ 已升级子模块依赖"
+
+# Round 1 Step 3: Tidy sub-module go.mod files
+# 轮次1步骤3: 整理子模块的 go.mod
+source-round1-step3:
+	cd demo1kratos && go mod tidy -e
+	cd demo2kratos && go mod tidy -e
+	@echo "✅ 已整理子模块 go.mod"
+
+# Round 1 Step 4: Regenerate proto/code in each sub-module
+# 轮次1步骤4: 在各子模块里重新生成 proto 和代码
+#
+# Run 'make all' in each sub-module to regenerate proto code based on new dependencies.
+# 在各子模块执行 make all 基于新依赖重新生成 proto 代码。
+source-round1-step4:
+	cd demo1kratos && make all
+	cd demo2kratos && make all
+	@echo "✅ 子模块代码已重新生成"
+
+# Round 1 Step 5: Run sub-module tests
+# 轮次1步骤5: 运行子模块测试
+source-round1-step5:
+	# -count=1 强制每次跑，不走测试缓存
+	cd demo1kratos && go test -v -count=1 ./...
+	cd demo2kratos && go test -v -count=1 ./...
+	@echo "✅ 子模块测试通过"
+
+# Round 1 Step 6: Run lint on sub-modules
+# 轮次1步骤6: 子模块代码检查
+source-round1-step6:
+	# go-lint 是对 golangci-lint 的封装，支持多项目工作区
+	go-lint
+	@echo "✅ 代码检查通过"
+
+# Round 1 Step 7: Commit sub-module upgrades
+# 轮次1步骤7: 提交子模块升级
+source-round1-step7:
+	git diff --quiet || (git add -A && git commit -m "Upgrade sub-module deps")
+	git status
+	@echo "✅ 已提交子模块升级"
+
+# Round 1 Step 8: Push main (first push)
+# 轮次1步骤8: 推送 main（第一次推送）
+source-round1-step8:
+	git push origin main
+	@echo "✅ 第一次推送完成，请等待 CI 通过后再执行 step9"
+
+# Round 1 Step 9: Wait for CI to pass
+# 轮次1步骤9: 等待 CI 通过
+source-round1-step9:
+	# 查看最新 run ID，然后用 gh run watch 等待
+	gh run list --limit 2
+	@echo "请执行: gh run watch <run-id> --exit-status"
+	@echo "等待 CI 通过后再执行 step10 打子模块标签"
+
+# Round 1 Step 10: Tag sub-modules only
+# 轮次1步骤10: 只给子模块打标签
+source-round1-step10:
+	# 进入子模块目录分别打标签
+	# tago bump sub-module -b=100 会基于子模块前缀自动递增版本（如 demo1kratos/v0.0.X），-b=100 表示免确认直接执行
+	cd demo1kratos && tago bump sub-module -b=100
+	cd demo2kratos && tago bump sub-module -b=100
+	@echo "✅ 子模块标签已打并推送"
+	@echo "   请等待 CI 通过以及标签对 go proxy 可用后再执行 Round 2"
+
+# ========================================
+# Round 2: Upgrade and Release ROOT module
+# 轮次 2: 升级并发布 根模块
+# ========================================
+# Only run this AFTER Round 1 is complete AND sub-module tags are available on go proxy.
+# Round 2 升级根模块的 go.mod，让它引用轮次 1 刚打的子模块新版本。
+# 只在 Round 1 完成、且子模块标签在 go proxy 上可用后才执行。
+
+# Round 2 Step 1: Upgrade root go.mod to use new sub-module versions
+# 轮次2步骤1: 升级根模块 go.mod 引用新的子模块版本
+#
+# Round 1 刚打完子模块标签，go proxy 可能还没索引到。
+# 先用 GOPROXY=direct 强制从 git 拉取最新子模块版本，绕过 proxy 缓存。
+# 然后再 depbump 升级根模块的其他依赖。
+#
+# Round 1 just tagged sub-modules, go proxy may take a moment to index them.
+# First use GOPROXY=direct to force-pull new sub-module versions from git (bypass proxy cache).
+# Then run depbump to upgrade other deps in root module.
+source-round2-step1:
+	# 强制从 git 拉取刚打标签的子模块新版本（绕过 proxy 缓存）
+	GOPROXY=direct go get github.com/yylego/kratos-examples/demo1kratos@latest
+	GOPROXY=direct go get github.com/yylego/kratos-examples/demo2kratos@latest
+	# 再用 depbump 升级根模块的其他依赖
+	depbump || depbump update -D
+	@echo "✅ 已升级根模块依赖"
+
+# Round 2 Step 2: Tidy root go.mod
+# 轮次2步骤2: 整理根模块 go.mod
+source-round2-step2:
+	go mod tidy -e
+	@echo "✅ 已整理根模块 go.mod"
+
+# Round 2 Step 3: Run root module tests
+# 轮次2步骤3: 运行根模块测试
+source-round2-step3:
+	# -count=1 强制每次跑，不走测试缓存
+	go test -v -count=1 ./...
+	@echo "✅ 根模块测试通过"
+
+# Round 2 Step 4: Run lint
+# 轮次2步骤4: 代码检查
+source-round2-step4:
+	go-lint
+	@echo "✅ 代码检查通过"
+
+# Round 2 Step 5: Commit root go.mod upgrade
+# 轮次2步骤5: 提交根模块升级
+source-round2-step5:
+	git diff --quiet || (git add -A && git commit -m "Upgrade root go.mod to use new sub-module versions")
+	git status
+	@echo "✅ 已提交根模块升级"
+
+# Round 2 Step 6: Push main (second push)
+# 轮次2步骤6: 推送 main（第二次推送）
+source-round2-step6:
+	git push origin main
+	@echo "✅ 第二次推送完成，请等待 CI 通过后再执行 step7"
+
+# Round 2 Step 7: Wait for CI to pass
+# 轮次2步骤7: 等待 CI 通过
+source-round2-step7:
+	gh run list --limit 2
+	@echo "请执行: gh run watch <run-id> --exit-status"
+	@echo "等待 CI 通过后再执行 step8 打根模块标签"
+
+# Round 2 Step 8: Tag root module
+# 轮次2步骤8: 给根模块打标签
+source-round2-step8:
+	# 根模块打标签（如 v0.0.X），-b=100 表示免确认直接执行
+	tago bump main -b=100
+	@echo "✅ 根模块标签已打并推送"
+	@echo "   下游 fork 项目现在可以通过 merge-stepN 同步这次的变更"
+
+# ========================================
 # Sync Upstream Repo Changes to Fork Project - Complete Workflow
 # 同步上游仓库最新修改到 fork 项目的完整流程
 # ========================================
@@ -294,30 +483,42 @@ merge-step7:
 	# depbump bump -E: 智能升级所有依赖（直接+间接）
 	# depbump bump -ER: 在工作区所有模块中智能升级所有依赖
 
-# Step 8: Commit dependency upgrades when changed
-# 第8步: 提交依赖升级变动（如果有的话）
+# Step 8: Regenerate proto/code in each sub-module
+# 第8步: 在各子模块重新生成 proto 和代码
+#
+# 依赖升级后，需要用 make all 根据新依赖重新生成 proto 代码。
+# 如果跳过这步，可能用的是老版本生成的代码，测试通过但实际发布会有问题。
+#
+# After dep upgrades, run 'make all' to regenerate proto code based on new dependencies.
+# Skipping this may leave stale generated code: tests pass but the release may break.
 merge-step8:
+	cd demo1kratos && make all
+	cd demo2kratos && make all
+	@echo "✅ 子模块代码已重新生成"
+
+# Step 9: Commit dependency upgrades when changed
+# 第9步: 提交依赖升级变动（如果有的话）
+merge-step9:
 	# 检查是否有依赖升级的变动，如果有则单独提交
 	git diff --quiet || (git add -A && git commit -m "简单升级依赖包")
 	git status
 	@echo "✅ 已提交依赖升级变动（如果有的话）"
 
-# Step 9: Run all tests to make sure code works
-# 第9步: 运行所有测试确保代码正常工作
-merge-step9:
+# Step 10: Run all tests to make sure code works
+# 第10步: 运行所有测试确保代码正常工作
+merge-step10:
 	# 运行所有的测试确保代码正常工作
-	# 清理测试缓存避免旧缓存影响结果
-	go clean -testcache
-	go test -v ./...
+	# -count=1 强制每次跑，不走测试缓存
+	go test -v -count=1 ./...
 	# 在项目根目录里进第1个项目
-	cd demo1kratos && go test -v ./...
+	cd demo1kratos && go test -v -count=1 ./...
 	# 在项目根目录里进第2个项目
-	cd demo2kratos && go test -v ./...
+	cd demo2kratos && go test -v -count=1 ./...
 	@echo "✅ 已进行单元测试"
 
-# Step 10: Tidy go.mod and go.sum files
-# 第10步: 整理 go.mod 和 go.sum 文件
-merge-step10:
+# Step 11: Tidy go.mod and go.sum files
+# 第11步: 整理 go.mod 和 go.sum 文件
+merge-step11:
 	# 整理 go.mod 和 go.sum 文件
 	# -e 参数允许在有错误时继续执行
 	go mod tidy -e
@@ -327,16 +528,16 @@ merge-step10:
 	cd demo2kratos && go mod tidy -e
 	@echo "✅ 已整理所有依赖"
 
-# Step 11: Run lint and code formatting
-# 第11步: 运行代码静态检查和格式化
-merge-step11:
+# Step 12: Run lint and code formatting
+# 第12步: 运行代码静态检查和格式化
+merge-step12:
 	# 运行代码静态检查和格式化
 	go-lint
 	@echo "✅ 已进行代码检查"
 
-# Step 12: Restore stashed changes when exist
-# 第12步: 恢复之前暂存的代码（如果有的话）
-merge-step12:
+# Step 13: Restore stashed changes when exist
+# 第13步: 恢复之前暂存的代码（如果有的话）
+merge-step13:
 	# 恢复之前暂存的代码（如果有的话）
 	# 检查是否有 stash 存在，如果有则恢复
 	git stash list

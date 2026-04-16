@@ -23,7 +23,7 @@ Demo projects built with the Go-Kratos framework.
 
 **kratos-examples** is a reference implementation demonstrating best practices when building microservices with the [Go-Kratos](https://go-kratos.dev) framework. It serves as:
 
-- 🎯 **Foundation Project** - The upstream template of 15+ specialized demo projects in the kratos-orz ecosystem
+- 🎯 **Foundation Project** - The upstream template of 20+ specialized demo projects in the kratos-orz ecosystem
 - 🛠️ **Toolchain Integration Example** - Showcasing kratos-orz development tools in action
 - 📚 **Learning Resource** - Complete microservice structure following Kratos conventions
 - ⚡ **Fast Development** - Auto-sync proto and code through magic commands like make orz
@@ -34,10 +34,41 @@ Demo projects built with the Go-Kratos framework.
 
 - Clean architecture with distinct separation of concerns
 - Comprehensive middleware and plugin ecosystem
-- Built-in gRPC and HTTP protocol support
+- Built-in gRPC and HTTP transport
 - Excellent documentation and active ecosystem
 
 **kratos-examples builds upon this solid foundation**, adding enhanced tooling and automation to streamline the development workflow.
+
+## Example Projects
+
+The following projects are forked from kratos-examples, each demonstrating different features and integrations such as authentication, configuration, scheduling, databases, logging, tracing, frontend integration, and more:
+
+|    demo     |                      repo                      |
+| :---------: | :--------------------------------------------: |
+|     ast     |     https://github.com/kratos-examples/ast     |
+| custom-auth | https://github.com/kratos-examples/custom-auth |
+| static-auth | https://github.com/kratos-examples/static-auth |
+|   config    |   https://github.com/kratos-examples/config    |
+|    cron     |    https://github.com/kratos-examples/cron     |
+|     ebz     |     https://github.com/kratos-examples/ebz     |
+|    cobra    |    https://github.com/kratos-examples/cobra    |
+|    gorm     |    https://github.com/kratos-examples/gorm     |
+|  gormzhcn   |  https://github.com/kratos-examples/gormzhcn   |
+|    cors     |    https://github.com/kratos-examples/cors     |
+|    i18n     |    https://github.com/kratos-examples/i18n     |
+|    nacos    |    https://github.com/kratos-examples/nacos    |
+| rate-limit  | https://github.com/kratos-examples/rate-limit  |
+|   swaggo    |   https://github.com/kratos-examples/swaggo    |
+|    trace    |    https://github.com/kratos-examples/trace    |
+|    test     |    https://github.com/kratos-examples/test     |
+|    vue3     |    https://github.com/kratos-examples/vue3     |
+|  vue3zhcn   |  https://github.com/kratos-examples/vue3zhcn   |
+|    wire     |    https://github.com/kratos-examples/wire     |
+|     zap     |     https://github.com/kratos-examples/zap     |
+|    zapzh    |    https://github.com/kratos-examples/zapzh    |
+|   migrate   |   https://github.com/kratos-examples/migrate   |
+|    ping     |    https://github.com/kratos-examples/ping     |
+| supervisord | https://github.com/kratos-examples/supervisord |
 
 ## Core Features
 
@@ -83,20 +114,58 @@ Through `make merge-stepN` series commands, auto handles upstream code merging, 
 
 See [Makefile](./Makefile) with detailed workflow and usage instructions.
 
-## Project Structure
+## Upgrade Workflow
 
-### Demo Projects
+The ecosystem uses a **two-stage upgrade scheme**: upstream (this project) → downstream (20+ fork projects).
 
-Provides two demos to showcase the usage of various features:
+### Stage 1: Upgrade the Upstream (This Project)
 
-- [demo1kratos](./demo1kratos) - Student CRUD microservice (simple Kratos example)
-- [demo2kratos](./demo2kratos) - Article CRUD microservice (advanced features and integrations)
+This project is a **multi-module repo** with a root module plus two sub-modules (`demo1kratos`, `demo2kratos`). Sub-modules must be tagged first, then root can reference the new sub-module tags, so upgrade is split into two rounds:
 
-Both demos follow standard Kratos project structure with proto-first design, Wire DI, and gRPC/HTTP endpoints.
+```bash
+# Round 1: upgrade and tag SUB-MODULES
+make source-round1-step1
+make source-round1-step2
+# ... run each source-round1-stepN in sequence
 
-We provide a code comparison between Demo1 (base) and Demo2 (fork), highlighting the changed code blocks.
+# Pause, make sure CI passes and go module cache picks up the new sub-module tags, then:
 
-When this project is forked, you can also compare it with the source to see the differences.
+# Round 2: upgrade and tag ROOT module
+make source-round2-step1
+make source-round2-step2
+# ... run each source-round2-stepN in sequence
+```
+
+Each step prints a brief description when executed. Check the [Makefile](./Makefile) to see each step's specifics.
+
+**Important**: Once tagged, downstream fork projects can pick up the changes via Stage 2.
+
+### Stage 2: Sync Downstream Fork Projects
+
+In each fork project (e.g. [kratos-examples/trace](https://github.com/kratos-examples/trace)), run the Makefile `merge-step*` series in sequence to sync with this upstream:
+
+```bash
+make merge-step1
+make merge-step2
+# ... run each merge-stepN in sequence
+```
+
+Common flow:
+
+- Opening steps handle code sync (git merge) — resolve conflicts on own (often in `go.mod` / `go.sum`)
+- Middle steps handle dep upgrades, code regeneration, tests, and lint
+- Closing step restores on-disk changes stashed before
+
+Check the fork project's [Makefile](./Makefile) to see each step's specifics.
+
+### Two-Stage Design
+
+- **Upstream** is the template — holds the common Kratos skeleton and toolchain
+- **Downstream** forks each focus on one specific feature (trace, gorm, zap, i18n, ...)
+- Forks don't merge back to upstream — each one remains as a standalone example
+- Downstream pulls in upstream changes on a recurring cadence to keep in sync with the latest Kratos version
+
+This pattern lets users learn one specific feature at a time while ensuring each demo uses up-to-date framework code.
 
 ### Code Changes
 
@@ -104,7 +173,7 @@ The [changes/](./changes) section contains markdown files documenting code diffe
 
 - [changes/demo1.md](./changes/demo1.md) - Demo1 changes compared to source
 - [changes/demo2.md](./changes/demo2.md) - Demo2 changes compared to source
-- [changes/aside.md](changes/aside.md) - Aside modules and sibling projects
+- [changes/aside.md](./changes/aside.md) - Aside modules and sibling projects
 
 Tests auto-generate these files:
 
@@ -118,31 +187,31 @@ go test -v -run TestGenerateAsideChanges # Generate aside.md
 
 **In fork projects:** Files show code differences with syntax highlighting, making it simple to track customizations on GitHub.
 
-## Forks
+## Project Structure
 
-|    demo     |                      repo                      |
-| :---------: | :--------------------------------------------: |
-|     ast     |     https://github.com/kratos-examples/ast     |
-| custom-auth | https://github.com/kratos-examples/custom-auth |
-| static-auth | https://github.com/kratos-examples/static-auth |
-|   config    |   https://github.com/kratos-examples/config    |
-|    cron     |    https://github.com/kratos-examples/cron     |
-|     ebz     |     https://github.com/kratos-examples/ebz     |
-|    cobra    |    https://github.com/kratos-examples/cobra    |
-|    gorm     |    https://github.com/kratos-examples/gorm     |
-|    cors     |    https://github.com/kratos-examples/cors     |
-|    i18n     |    https://github.com/kratos-examples/i18n     |
-|    nacos    |    https://github.com/kratos-examples/nacos    |
-|   swaggo    |   https://github.com/kratos-examples/swaggo    |
-|    trace    |    https://github.com/kratos-examples/trace    |
-|    test     |    https://github.com/kratos-examples/test     |
-|    vue3     |    https://github.com/kratos-examples/vue3     |
-|    wire     |    https://github.com/kratos-examples/wire     |
-|     zap     |     https://github.com/kratos-examples/zap     |
-|    zapzh    |    https://github.com/kratos-examples/zapzh    |
-|   migrate   |   https://github.com/kratos-examples/migrate   |
-|    ping     |    https://github.com/kratos-examples/ping     |
-| supervisord | https://github.com/kratos-examples/supervisord |
+### Built-in Demos
+
+Provides two demos to showcase the usage of various features:
+
+- [demo1kratos](./demo1kratos) - Student CRUD microservice (simple Kratos example)
+- [demo2kratos](./demo2kratos) - Article CRUD microservice (advanced features and integrations)
+
+Both demos follow standard Kratos project structure with proto-first design, Wire DI, and gRPC/HTTP endpoints.
+
+### Input Validation
+
+The project demonstrates a two-stage validation pattern:
+
+- **Service Stage** - Returns `ErrorBadParam` (HTTP 400) on invalid input, giving clients actionable feedback
+- **Biz Stage** - Uses `must` assertions (panic on failure) as a safeguard. Since the service stage has done the validation, the biz stage is just a redundant check, so it uses simple assertions instead of returning verbose errors. This also ensures the biz module is self-protected — even if someone invokes it from a new context and forgets to validate inputs, the assertions will catch it. Instead of scattering defensive checks throughout the code, assertions at the entrance make the module refuse to execute on invalid inputs, keeping the downstream logic clean and confident
+
+### Data Access
+
+The source project uses `gofakeit` to generate mock data, keeping the focus on the framework and its toolchain integration. Fork projects (such as [gorm](https://github.com/kratos-examples/gorm)) use GORM + SQLite database operations, demonstrating production-grade CRUD patterns with `gormrepo`.
+
+We provide a code comparison between Demo1 (base) and Demo2 (fork), highlighting the changed code blocks.
+
+When this project is forked, you can also compare it with the source to see the differences.
 
 <!-- TEMPLATE (EN) BEGIN: STANDARD PROJECT FOOTER -->
 <!-- VERSION 2025-11-25 03:52:28.131064 +0000 UTC -->

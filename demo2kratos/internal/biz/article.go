@@ -9,6 +9,7 @@ import (
 	demo1student "github.com/yylego/kratos-examples/demo1kratos/api/student"
 	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
 	"github.com/yylego/kratos-examples/demo2kratos/internal/data"
+	"github.com/yylego/must"
 )
 
 type Article struct {
@@ -29,6 +30,8 @@ func NewArticleUsecase(data *data.Data, demo1HttpClient *data.Demo1HttpClient, l
 }
 
 func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Article, *ebzkratos.Ebz) {
+	must.Nice(a.Title)
+
 	var res Article
 	if err := gofakeit.Struct(&res); err != nil {
 		return nil, ebzkratos.New(pb.ErrorArticleCreateFailure("fake: %v", err))
@@ -45,6 +48,9 @@ func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Artic
 }
 
 func (uc *ArticleUsecase) UpdateArticle(ctx context.Context, a *Article) (*Article, *ebzkratos.Ebz) {
+	must.True(a.ID > 0)
+	must.Nice(a.Title)
+
 	var res Article
 	if err := gofakeit.Struct(&res); err != nil {
 		return nil, ebzkratos.New(pb.ErrorServerError("fake: %v", err))
@@ -53,10 +59,14 @@ func (uc *ArticleUsecase) UpdateArticle(ctx context.Context, a *Article) (*Artic
 }
 
 func (uc *ArticleUsecase) DeleteArticle(ctx context.Context, id int64) *ebzkratos.Ebz {
+	must.True(id > 0)
+
 	return nil
 }
 
 func (uc *ArticleUsecase) GetArticle(ctx context.Context, id int64) (*Article, *ebzkratos.Ebz) {
+	must.True(id > 0)
+
 	var res Article
 	if err := gofakeit.Struct(&res); err != nil {
 		return nil, ebzkratos.New(pb.ErrorServerError("fake: %v", err))
