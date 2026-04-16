@@ -13,6 +13,7 @@ import (
 	"github.com/go-kratos/kratos/v2/transport/http"
 	"github.com/yylego/done"
 	"github.com/yylego/kratos-examples/demo2kratos/internal/conf"
+	"github.com/yylego/kratos-trace/tracekratos"
 	"github.com/yylego/must"
 	"github.com/yylego/rese"
 )
@@ -55,6 +56,7 @@ func main() {
 		"service.version", Version,
 		"trace.id", tracing.TraceID(),
 		"span.id", tracing.SpanID(),
+		"request-trace", tracekratos.LogTraceID(), // 我们自己的 trace ID，与官方 trace.id 并行
 	)
 	c := config.New(
 		config.WithSource(
