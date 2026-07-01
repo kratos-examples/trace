@@ -2,14 +2,15 @@ package server
 
 import (
 	"context"
+	"log/slog"
 	"strconv"
 	"time"
 
-	"github.com/go-kratos/kratos/v2/log"
-	"github.com/go-kratos/kratos/v2/middleware"
-	"github.com/go-kratos/kratos/v2/middleware/logging"
-	"github.com/go-kratos/kratos/v2/middleware/recovery"
-	"github.com/go-kratos/kratos/v2/transport/http"
+	"github.com/go-kratos/kratos/v3/log"
+	"github.com/go-kratos/kratos/v3/middleware"
+	"github.com/go-kratos/kratos/v3/middleware/logging"
+	"github.com/go-kratos/kratos/v3/middleware/recovery"
+	"github.com/go-kratos/kratos/v3/transport/http"
 	"github.com/google/uuid"
 	pb "github.com/yylego/kratos-examples/demo1kratos/api/student"
 	"github.com/yylego/kratos-examples/demo1kratos/internal/conf"
@@ -17,12 +18,12 @@ import (
 	"github.com/yylego/kratos-trace/tracekratos"
 )
 
-func NewHTTPServer(c *conf.Server, student *service.StudentService, logger log.Logger) *http.Server {
+func NewHTTPServer(c *conf.Server, student *service.StudentService, logger *slog.Logger) *http.Server {
 	var opts = []http.ServerOption{
 		http.Middleware(
 			recovery.Recovery(),
-			NewTraceMiddleware(logger), //在请求逻辑执行前打印日志，显示请求参数和追踪信息
-			logging.Server(logger),     //在请求逻辑执行后打印日志，显示执行结果的错误码和状态码
+			NewTraceMiddleware(logger), // 在请求逻辑执行前打印日志，显示请求参数和追踪信息
+			logging.Server(logger),     // 在请求逻辑执行后打印日志，显示执行结果的错误码和状态码
 		),
 	}
 	if c.Http.Network != "" {
@@ -39,7 +40,7 @@ func NewHTTPServer(c *conf.Server, student *service.StudentService, logger log.L
 	return srv
 }
 
-func NewTraceMiddleware(logger log.Logger) middleware.Middleware {
+func NewTraceMiddleware(logger *slog.Logger) middleware.Middleware {
 	// Demo tracekratos features using function options
 	// 演示 tracekratos 的功能选项
 	config := tracekratos.NewConfig("TRACE_ID",

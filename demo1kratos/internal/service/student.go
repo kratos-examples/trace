@@ -2,8 +2,8 @@ package service
 
 import (
 	"context"
+	"log/slog"
 
-	"github.com/go-kratos/kratos/v2/log"
 	pb "github.com/yylego/kratos-examples/demo1kratos/api/student"
 	"github.com/yylego/kratos-examples/demo1kratos/internal/biz"
 	"github.com/yylego/kratos-trace/tracekratos"
@@ -13,13 +13,13 @@ type StudentService struct {
 	pb.UnimplementedStudentServiceServer
 
 	uc  *biz.StudentUsecase
-	log *log.Helper
+	log *slog.Logger
 }
 
-func NewStudentService(uc *biz.StudentUsecase, logger log.Logger) *StudentService {
+func NewStudentService(uc *biz.StudentUsecase, logger *slog.Logger) *StudentService {
 	return &StudentService{
 		uc:  uc,
-		log: log.NewHelper(logger),
+		log: logger,
 	}
 }
 
@@ -27,7 +27,7 @@ func (s *StudentService) CreateStudent(ctx context.Context, req *pb.CreateStuden
 	// Demo GetTraceID feature from tracekratos
 	// 演示 tracekratos 的 GetTraceID 功能
 	traceID := tracekratos.GetTraceID(ctx)
-	s.log.WithContext(ctx).Infof("Processing request with trace ID: %s", traceID)
+	s.log.InfoContext(ctx, "Processing request with trace ID", "trace_id", traceID)
 
 	if req.Name == "" {
 		return nil, pb.ErrorBadParam("NAME IS REQUIRED")

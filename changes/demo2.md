@@ -5,35 +5,40 @@ Code differences compared to source project.
 ## cmd/demo2kratos/main.go (+2 -0)
 
 ```diff
-@@ -13,6 +13,7 @@
- 	"github.com/go-kratos/kratos/v2/transport/http"
+@@ -14,6 +14,7 @@
+ 	"github.com/go-kratos/kratos/v3/transport/http"
  	"github.com/yylego/done"
  	"github.com/yylego/kratos-examples/demo2kratos/internal/conf"
 +	"github.com/yylego/kratos-trace/tracekratos"
  	"github.com/yylego/must"
  	"github.com/yylego/rese"
- )
-@@ -55,6 +56,7 @@
- 		"service.version", Version,
- 		"trace.id", tracing.TraceID(),
- 		"span.id", tracing.SpanID(),
-+		"request-trace", tracekratos.LogTraceID(), // 我们自己的 trace ID，与官方 trace.id 并行
- 	)
- 	c := config.New(
- 		config.WithSource(
+ 
+@@ -56,6 +57,7 @@
+ 			Level:     slog.LevelInfo,
+ 		}),
+ 		log.WithExtractor(tracing.TraceAttrs),
++		log.WithExtractor(tracekratos.LogTraceID("request-trace")), // 我们自己的 trace ID，与官方 trace 属性并行
+ 	).With(
+ 		slog.String("service.id", done.VCE(os.Hostname()).Omit()),
+ 		slog.String("service.name", Name),
 ```
 
-## cmd/demo2kratos/wire_gen.go (+4 -2)
+## cmd/demo2kratos/wire_gen.go (+5 -2)
 
 ```diff
-@@ -23,12 +23,14 @@
+@@ -28,16 +28,19 @@
  	if err != nil {
  		return nil, nil, err
  	}
--	articleUsecase := biz.NewArticleUsecase(dataData, logger)
--	articleService := service.NewArticleService(articleUsecase)
+-	articleUsecase, err := biz.NewArticleUsecase(dataData, logger)
 +	demo1HttpClient, cleanup2 := data.NewDemo1HttpClient(logger)
-+	articleUsecase := biz.NewArticleUsecase(dataData, demo1HttpClient, logger)
++	articleUsecase, err := biz.NewArticleUsecase(dataData, demo1HttpClient, logger)
+ 	if err != nil {
++		cleanup2()
+ 		cleanup()
+ 		return nil, nil, err
+ 	}
+-	articleService := service.NewArticleService(articleUsecase)
 +	articleService := service.NewArticleService(articleUsecase, logger)
  	grpcServer := server.NewGRPCServer(confServer, articleService, logger)
  	httpServer := server.NewHTTPServer(confServer, articleService, logger)
@@ -45,56 +50,66 @@ Code differences compared to source project.
  }
 ```
 
-## internal/biz/article.go (+14 -4)
+## internal/biz/article.go (+17 -5)
 
 ```diff
 @@ -6,6 +6,7 @@
- 	"github.com/brianvoe/gofakeit/v7"
- 	"github.com/go-kratos/kratos/v2/log"
+ 	"log/slog"
+ 
  	"github.com/yylego/kratos-ebz/ebzkratos"
 +	demo1student "github.com/yylego/kratos-examples/demo1kratos/api/student"
  	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
  	"github.com/yylego/kratos-examples/demo2kratos/internal/data"
  	"github.com/yylego/must"
-@@ -19,12 +20,13 @@
- }
+@@ -29,18 +30,19 @@
+ func (Article) TableName() string { return "articles" }
  
  type ArticleUsecase struct {
 -	data *data.Data
--	log  *log.Helper
+-	slog *slog.Logger
 +	data            *data.Data
 +	demo1HttpClient *data.Demo1HttpClient
-+	log             *log.Helper
++	slog            *slog.Logger
  }
  
--func NewArticleUsecase(data *data.Data, logger log.Logger) *ArticleUsecase {
--	return &ArticleUsecase{data: data, log: log.NewHelper(logger)}
-+func NewArticleUsecase(data *data.Data, demo1HttpClient *data.Demo1HttpClient, logger log.Logger) *ArticleUsecase {
-+	return &ArticleUsecase{data: data, demo1HttpClient: demo1HttpClient, log: log.NewHelper(logger)}
+-func NewArticleUsecase(data *data.Data, logger *slog.Logger) (*ArticleUsecase, error) {
++func NewArticleUsecase(data *data.Data, demo1HttpClient *data.Demo1HttpClient, logger *slog.Logger) (*ArticleUsecase, error) {
+ 	// Migrate the owned table plus the mirrored students table (needed in the
+ 	// existence check); both services share one database
+ 	// 建好本服务拥有的 articles 表，外加镜像的 students 表（供存在性校验用）
+ 	if err := data.DB().AutoMigrate(&Article{}, &Student{}); err != nil {
+ 		return nil, err
+ 	}
+-	return &ArticleUsecase{data: data, slog: logger}, nil
++	return &ArticleUsecase{data: data, demo1HttpClient: demo1HttpClient, slog: logger}, nil
  }
  
  func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Article, *ebzkratos.Ebz) {
-@@ -34,6 +36,14 @@
- 	if err := gofakeit.Struct(&res); err != nil {
- 		return nil, ebzkratos.New(pb.ErrorArticleCreateFailure("fake: %v", err))
- 	}
-+	// 跨服务调用 demo1kratos，trace ID 会通过 HTTP header 传播
+@@ -55,7 +57,17 @@
+ 	// （它持 FOR UPDATE）在本事务提交前删除该学生，从而绝不会创建出指向
+ 	// "正在被删除的学生"的文章
+ 	res := &Article{Title: a.Title, Content: a.Content, StudentID: a.StudentID}
+-	err := uc.data.DB().WithContext(ctx).Transaction(func(db *gorm.DB) error {
++
++	// 跨服务调用 demo1kratos：trace ID 会通过 HTTP header 传播到对端，演示跨服务链路追踪
 +	resp, err := uc.demo1HttpClient.GetStudentClient().CreateStudent(ctx, &demo1student.CreateStudentRequest{
-+		Name: res.Title,
++		Name: a.Title,
 +	})
 +	if err != nil {
-+		return nil, ebzkratos.New(pb.ErrorServerError("http: %v", err))
++		return nil, ebzkratos.New(pb.ErrorArticleCreateFailure("call demo1 over http: %v", err))
 +	}
-+	res.Title = "message:[http-resp:" + resp.GetStudent().GetName() + "]"
- 	return &res, nil
- }
- 
++	res.Content = res.Content + " [http-resp:" + resp.GetStudent().GetName() + "]"
++
++	err = uc.data.DB().WithContext(ctx).Transaction(func(db *gorm.DB) error {
+ 		var student Student
+ 		if err := db.Clauses(clause.Locking{Strength: clause.LockingStrengthShare}).First(&student, a.StudentID).Error; err != nil {
+ 			return err
 ```
 
 ## internal/data/data.go (+1 -1)
 
 ```diff
-@@ -10,7 +10,7 @@
+@@ -11,7 +11,7 @@
  	"gorm.io/gorm"
  )
  
@@ -105,19 +120,20 @@ Code differences compared to source project.
  	db *gorm.DB
 ```
 
-## internal/data/demo1_http_client.go (+45 -0)
+## internal/data/demo1_http_client.go (+48 -0)
 
 ```diff
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,48 @@
 +package data
 +
 +import (
 +	"context"
++	"log/slog"
 +
-+	"github.com/go-kratos/kratos/v2/log"
-+	"github.com/go-kratos/kratos/v2/middleware"
-+	"github.com/go-kratos/kratos/v2/transport/http"
++	"github.com/go-kratos/kratos/v3/middleware"
++	"github.com/go-kratos/kratos/v3/transport/http"
 +	demo1student "github.com/yylego/kratos-examples/demo1kratos/api/student"
++	"github.com/yylego/kratos-trace/tracekratos"
 +	"github.com/yylego/must"
 +	"github.com/yylego/rese"
 +)
@@ -127,19 +143,21 @@ Code differences compared to source project.
 +	studentClient demo1student.StudentServiceHTTPClient
 +}
 +
-+func NewDemo1HttpClient(logger log.Logger) (*Demo1HttpClient, func()) {
-+	LOG := log.NewHelper(logger)
-+
++func NewDemo1HttpClient(logger *slog.Logger) (*Demo1HttpClient, func()) {
 +	// 直接连接 demo1kratos 的 HTTP 端口，trace ID 会通过 HTTP header 跨服务传播
 +	client := rese.P1(http.NewClient(
 +		context.Background(),
 +		http.WithEndpoint("http://127.0.0.1:8001"),
-+		http.WithMiddleware(func(handler middleware.Handler) middleware.Handler {
-+			LOG.Infof("handle http request in middleware")
-+			return func(ctx context.Context, req any) (any, error) {
-+				return handler(ctx, req)
-+			}
-+		}),
++		http.WithMiddleware(
++			// 把当前请求的 trace ID 写进出站 HTTP header，让下游 demo1 收到同一个 trace ID
++			tracekratos.NewClientMiddleware(tracekratos.NewConfig("TRACE_ID")),
++			func(handler middleware.Handler) middleware.Handler {
++				logger.Info("handle http request in middleware")
++				return func(ctx context.Context, req any) (any, error) {
++					return handler(ctx, req)
++				}
++			},
++		),
 +	))
 +	studentClient := demo1student.NewStudentServiceHTTPClient(client)
 +	cleanup := func() {
@@ -159,19 +177,20 @@ Code differences compared to source project.
 ## internal/server/http.go (+26 -0)
 
 ```diff
-@@ -1,18 +1,28 @@
+@@ -1,19 +1,29 @@
  package server
  
  import (
 +	"context"
+ 	"log/slog"
 +	"strconv"
 +	"time"
-+
- 	"github.com/go-kratos/kratos/v2/log"
-+	"github.com/go-kratos/kratos/v2/middleware"
-+	"github.com/go-kratos/kratos/v2/middleware/logging"
- 	"github.com/go-kratos/kratos/v2/middleware/recovery"
- 	"github.com/go-kratos/kratos/v2/transport/http"
+ 
++	"github.com/go-kratos/kratos/v3/log"
++	"github.com/go-kratos/kratos/v3/middleware"
++	"github.com/go-kratos/kratos/v3/middleware/logging"
+ 	"github.com/go-kratos/kratos/v3/middleware/recovery"
+ 	"github.com/go-kratos/kratos/v3/transport/http"
 +	"github.com/google/uuid"
  	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
  	"github.com/yylego/kratos-examples/demo2kratos/internal/conf"
@@ -179,29 +198,29 @@ Code differences compared to source project.
 +	"github.com/yylego/kratos-trace/tracekratos"
  )
  
- func NewHTTPServer(c *conf.Server, article *service.ArticleService, logger log.Logger) *http.Server {
+ func NewHTTPServer(c *conf.Server, article *service.ArticleService, logger *slog.Logger) *http.Server {
  	var opts = []http.ServerOption{
  		http.Middleware(
  			recovery.Recovery(),
-+			NewTraceMiddleware(logger), //在请求逻辑执行前打印日志，显示请求参数和追踪信息
-+			logging.Server(logger),     //在请求逻辑执行后打印日志，显示执行结果的错误码和状态码
++			NewTraceMiddleware(logger), // 在请求逻辑执行前打印日志，显示请求参数和追踪信息
++			logging.Server(logger),     // 在请求逻辑执行后打印日志，显示执行结果的错误码和状态码
  		),
  	}
  	if c.Http.Network != "" {
-@@ -27,4 +37,20 @@
+@@ -28,4 +38,20 @@
  	srv := http.NewServer(opts...)
  	pb.RegisterArticleServiceHTTPServer(srv, article)
  	return srv
 +}
 +
-+func NewTraceMiddleware(logger log.Logger) middleware.Middleware {
++func NewTraceMiddleware(logger *slog.Logger) middleware.Middleware {
 +	// Demo tracekratos features using function options
 +	// 演示 tracekratos 的功能选项
 +	config := tracekratos.NewConfig("TRACE_ID",
-+		tracekratos.WithLogLevel(log.LevelInfo),
++		tracekratos.WithLogLevel(log.LevelDebug),
 +		tracekratos.WithLogReply(true),
 +		tracekratos.WithNewTraceID(func(ctx context.Context) string {
-+			return "TRACE-ID-" + strconv.FormatInt(time.Now().UnixNano(), 10) + "-" + uuid.New().String() + "-BBB"
++			return "TRACE-ID-" + strconv.FormatInt(time.Now().UnixNano(), 10) + "-" + uuid.New().String() + "-AAA"
 +		}),
 +		tracekratos.WithFormatArgs(func(req any) string {
 +			return tracekratos.ExtractArgs(req)
@@ -214,11 +233,12 @@ Code differences compared to source project.
 ## internal/service/article.go (+14 -3)
 
 ```diff
-@@ -3,21 +3,32 @@
+@@ -2,22 +2,33 @@
+ 
  import (
  	"context"
++	"log/slog"
  
-+	"github.com/go-kratos/kratos/v2/log"
  	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
  	"github.com/yylego/kratos-examples/demo2kratos/internal/biz"
 +	"github.com/yylego/kratos-trace/tracekratos"
@@ -229,15 +249,15 @@ Code differences compared to source project.
  
 -	uc *biz.ArticleUsecase
 +	uc  *biz.ArticleUsecase
-+	log *log.Helper
++	log *slog.Logger
  }
  
 -func NewArticleService(uc *biz.ArticleUsecase) *ArticleService {
 -	return &ArticleService{uc: uc}
-+func NewArticleService(uc *biz.ArticleUsecase, logger log.Logger) *ArticleService {
++func NewArticleService(uc *biz.ArticleUsecase, logger *slog.Logger) *ArticleService {
 +	return &ArticleService{
 +		uc:  uc,
-+		log: log.NewHelper(logger),
++		log: logger,
 +	}
  }
  
@@ -245,7 +265,7 @@ Code differences compared to source project.
 +	// Demo GetTraceID feature from tracekratos
 +	// 演示 tracekratos 的 GetTraceID 功能
 +	traceID := tracekratos.GetTraceID(ctx)
-+	s.log.WithContext(ctx).Infof("Processing request with trace ID: %s", traceID)
++	s.log.InfoContext(ctx, "Processing request with trace ID", "trace_id", traceID)
 +
  	if req.Title == "" {
  		return nil, pb.ErrorBadParam("TITLE IS REQUIRED")

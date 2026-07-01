@@ -2,11 +2,12 @@ package data
 
 import (
 	"context"
+	"log/slog"
 
-	"github.com/go-kratos/kratos/v2/log"
-	"github.com/go-kratos/kratos/v2/middleware"
-	"github.com/go-kratos/kratos/v2/transport/http"
+	"github.com/go-kratos/kratos/v3/middleware"
+	"github.com/go-kratos/kratos/v3/transport/http"
 	demo1student "github.com/yylego/kratos-examples/demo1kratos/api/student"
+	"github.com/yylego/kratos-trace/tracekratos"
 	"github.com/yylego/must"
 	"github.com/yylego/rese"
 )
@@ -16,19 +17,21 @@ type Demo1HttpClient struct {
 	studentClient demo1student.StudentServiceHTTPClient
 }
 
-func NewDemo1HttpClient(logger log.Logger) (*Demo1HttpClient, func()) {
-	LOG := log.NewHelper(logger)
-
+func NewDemo1HttpClient(logger *slog.Logger) (*Demo1HttpClient, func()) {
 	// 直接连接 demo1kratos 的 HTTP 端口，trace ID 会通过 HTTP header 跨服务传播
 	client := rese.P1(http.NewClient(
 		context.Background(),
 		http.WithEndpoint("http://127.0.0.1:8001"),
-		http.WithMiddleware(func(handler middleware.Handler) middleware.Handler {
-			LOG.Infof("handle http request in middleware")
-			return func(ctx context.Context, req any) (any, error) {
-				return handler(ctx, req)
-			}
-		}),
+		http.WithMiddleware(
+			// 把当前请求的 trace ID 写进出站 HTTP header，让下游 demo1 收到同一个 trace ID
+			tracekratos.NewClientMiddleware(tracekratos.NewConfig("TRACE_ID")),
+			func(handler middleware.Handler) middleware.Handler {
+				logger.Info("handle http request in middleware")
+				return func(ctx context.Context, req any) (any, error) {
+					return handler(ctx, req)
+				}
+			},
+		),
 	))
 	studentClient := demo1student.NewStudentServiceHTTPClient(client)
 	cleanup := func() {
