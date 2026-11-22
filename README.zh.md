@@ -13,6 +13,28 @@
 
 基于 Go-Kratos 框架构建的演示项目
 
+## 跨服务请求追踪
+
+这个演示通过 HTTP 传递自定义 `TRACE_ID`：入站请求 → demo2 服务端中间件 → demo2 HTTP 客户端中间件 → demo1 服务端中间件。`LogTraceID("request-trace")` 将 ID 加入带 context 的日志。自定义 ID 与官方 OpenTelemetry 的 `trace_id`/`span_id` 独立；这里没有配置 span 导出器或追踪看板。自定义追踪中间件接在 HTTP 服务上，未接入 gRPC 服务端。
+
+使用服务配置中的开发用 PostgreSQL 数据库。在两个终端分别进入对应模块，执行 `go run ./cmd/demo1kratos` 和 `go run ./cmd/demo2kratos`，监听 8001 和 8002。demo2 保留 `replace => ../demo1kratos` 引用本地 API，HTTP 客户端连接 `http://127.0.0.1:8001`。
+
+先创建文章所属的学生，把返回的 `student.id` 填入 `OWNER_ID`：
+
+```bash
+curl -fsS -H 'Content-Type: application/json' -d '{"name":"trace-owner"}' http://127.0.0.1:8001/students
+OWNER_ID=123 # 替换为实际返回的 ID
+curl -fsS -H 'Content-Type: application/json' -H 'TRACE_ID: trace-http-demo' \
+  -d "{\"title\":\"trace-article\",\"content\":\"body\",\"student_id\":$OWNER_ID}" \
+  http://127.0.0.1:8002/articles
+```
+
+两个服务的控制台应出现相同的 `request-trace=trace-http-demo`。追踪日志显示操作名、请求参数、状态码和耗时，demo2 的出站调用日志也携带同一个 ID。去掉 `TRACE_ID` 请求头再次创建文章，demo2 会生成 `TRACE-ID-<纳秒时间>-<UUID>-AAA`，demo1 收到的值应完全一致。带追踪头提交空学生名字，可在中间件日志中核对 400 校验失败也带有该 ID。
+
+原有跨服务示例会在 demo1 额外创建一个以文章标题命名的学生，并向文章内容追加 ` [http-resp:trace-article]`。额外学生不是文章归属的学生。HTTP 调用先于 demo2 的数据库归属校验，因此归属学生不存在时也可能留下额外学生。清理时，先用 `DELETE /students/$OWNER_ID` 删除归属学生并级联删除文章，再根据 demo1 对应 `created student` 日志中的 `id` 删除各个额外学生；不要按共用名字删除无关记录。
+
+中间件、日志提取、客户端接线及跨服务调用的完整差异见 [changes/demo1.md](changes/demo1.md) 和 [changes/demo2.md](changes/demo2.md)。在仓库根目录执行 `go test ./...` 重生成报告。
+
 ---
 
 <!-- TEMPLATE (ZH) BEGIN: LANGUAGE NAVIGATION -->

@@ -152,8 +152,8 @@ Code differences compared to source project.
 +			// 把当前请求的 trace ID 写进出站 HTTP header，让下游 demo1 收到同一个 trace ID
 +			tracekratos.NewClientMiddleware(tracekratos.NewConfig("TRACE_ID")),
 +			func(handler middleware.Handler) middleware.Handler {
-+				logger.Info("handle http request in middleware")
 +				return func(ctx context.Context, req any) (any, error) {
++					logger.InfoContext(ctx, "handle http request in middleware")
 +					return handler(ctx, req)
 +				}
 +			},
@@ -218,7 +218,7 @@ Code differences compared to source project.
 +	// Demo tracekratos features using function options
 +	// 演示 tracekratos 的功能选项
 +	config := tracekratos.NewConfig("TRACE_ID",
-+		tracekratos.WithLogLevel(log.LevelDebug),
++		tracekratos.WithLogLevel(log.LevelInfo),
 +		tracekratos.WithLogReply(true),
 +		tracekratos.WithNewTraceID(func(ctx context.Context) string {
 +			return "TRACE-ID-" + strconv.FormatInt(time.Now().UnixNano(), 10) + "-" + uuid.New().String() + "-AAA"

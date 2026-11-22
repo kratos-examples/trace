@@ -13,6 +13,28 @@
 
 Demo projects built with the Go-Kratos framework.
 
+## Cross-service request tracing
+
+This demo carries a custom `TRACE_ID` through HTTP: incoming request → demo2 server middleware → demo2 HTTP client middleware → demo1 server middleware. `LogTraceID("request-trace")` attaches that ID to context-aware logs. The custom ID is separate from the official OpenTelemetry `trace_id`/`span_id`; this demo does not configure a span exporter or a tracing dashboard. The custom middleware is wired to HTTP, not the gRPC server.
+
+Use the development PostgreSQL database in the service configs. Start demo1 on port 8001 and demo2 on port 8002 in separate terminals, each from its own module directory with `go run ./cmd/demo1kratos` or `go run ./cmd/demo2kratos`. demo2 resolves demo1's API through the existing `replace => ../demo1kratos` and calls `http://127.0.0.1:8001`.
+
+Create an owning student and copy the returned `student.id` into `OWNER_ID`:
+
+```bash
+curl -fsS -H 'Content-Type: application/json' -d '{"name":"trace-owner"}' http://127.0.0.1:8001/students
+OWNER_ID=123 # Replace with the returned ID
+curl -fsS -H 'Content-Type: application/json' -H 'TRACE_ID: trace-http-demo' \
+  -d "{\"title\":\"trace-article\",\"content\":\"body\",\"student_id\":$OWNER_ID}" \
+  http://127.0.0.1:8002/articles
+```
+
+Both service consoles should show `request-trace=trace-http-demo`. The request/response trace logs include operation, arguments, status code and duration; the demo2 outbound-call log also carries the same ID. Repeating the article request without the `TRACE_ID` header generates `TRACE-ID-<nanoseconds>-<UUID>-AAA` in demo2, and demo1 receives that exact value. Send an empty student name with a trace header to see a 400 validation failure carrying the ID in the middleware logs.
+
+The existing cross-service example deliberately creates an extra student in demo1, named after the article title, and appends ` [http-resp:trace-article]` to the article content. That extra student is not the article owner. The HTTP call runs before demo2 checks the owner in its database, so a missing owner can still leave this extra student. During cleanup, delete the owner with `DELETE /students/$OWNER_ID` to cascade its articles, then delete each extra student by the `id` in demo1's matching `created student` log. Never delete unrelated records by a shared name.
+
+See [changes/demo1.md](changes/demo1.md) and [changes/demo2.md](changes/demo2.md) for the middleware, log extraction, client wiring, and cross-service call. Regenerate the reports with `go test ./...` at the repository root.
+
 ---
 
 <!-- TEMPLATE (EN) BEGIN: LANGUAGE NAVIGATION -->

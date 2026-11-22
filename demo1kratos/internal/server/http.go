@@ -46,7 +46,7 @@ func NewTraceMiddleware(logger *slog.Logger) middleware.Middleware {
 	// Demo tracekratos features using function options
 	// 演示 tracekratos 的功能选项
 	config := tracekratos.NewConfig("TRACE_ID",
-		tracekratos.WithLogLevel(log.LevelDebug),
+		tracekratos.WithLogLevel(log.LevelInfo),
 		tracekratos.WithLogReply(true),
 		tracekratos.WithNewTraceID(func(ctx context.Context) string {
 			return "TRACE-ID-" + strconv.FormatInt(time.Now().UnixNano(), 10) + "-" + uuid.New().String() + "-AAA"
