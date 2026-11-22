@@ -5,15 +5,15 @@ Code differences compared to source project.
 ## cmd/demo1kratos/main.go (+2 -0)
 
 ```diff
-@@ -14,6 +14,7 @@
+@@ -15,6 +15,7 @@
  	"github.com/go-kratos/kratos/v3/transport/http"
  	"github.com/yylego/done"
  	"github.com/yylego/kratos-examples/demo1kratos/internal/conf"
 +	"github.com/yylego/kratos-trace/tracekratos"
  	"github.com/yylego/must"
  	"github.com/yylego/rese"
- 
-@@ -56,6 +57,7 @@
+ )
+@@ -55,6 +56,7 @@
  			Level:     slog.LevelInfo,
  		}),
  		log.WithExtractor(tracing.TraceAttrs),
@@ -26,7 +26,7 @@ Code differences compared to source project.
 ## cmd/demo1kratos/wire_gen.go (+1 -1)
 
 ```diff
-@@ -33,7 +33,7 @@
+@@ -29,7 +29,7 @@
  		cleanup()
  		return nil, nil, err
  	}
@@ -40,7 +40,7 @@ Code differences compared to source project.
 ## internal/server/http.go (+26 -0)
 
 ```diff
-@@ -1,19 +1,29 @@
+@@ -1,20 +1,30 @@
  package server
  
  import (
@@ -53,6 +53,7 @@ Code differences compared to source project.
 +	"github.com/go-kratos/kratos/v3/middleware"
 +	"github.com/go-kratos/kratos/v3/middleware/logging"
  	"github.com/go-kratos/kratos/v3/middleware/recovery"
+ 	"github.com/go-kratos/kratos/v3/middleware/validate"
  	"github.com/go-kratos/kratos/v3/transport/http"
 +	"github.com/google/uuid"
  	pb "github.com/yylego/kratos-examples/demo1kratos/api/student"
@@ -67,10 +68,10 @@ Code differences compared to source project.
  			recovery.Recovery(),
 +			NewTraceMiddleware(logger), // 在请求逻辑执行前打印日志，显示请求参数和追踪信息
 +			logging.Server(logger),     // 在请求逻辑执行后打印日志，显示执行结果的错误码和状态码
+ 			validate.Validator(validateRequiredFields),
  		),
  	}
- 	if c.Http.Network != "" {
-@@ -28,4 +38,20 @@
+@@ -30,4 +40,20 @@
  	srv := http.NewServer(opts...)
  	pb.RegisterStudentServiceHTTPServer(srv, student)
  	return srv

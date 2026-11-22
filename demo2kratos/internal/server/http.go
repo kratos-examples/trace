@@ -10,6 +10,7 @@ import (
 	"github.com/go-kratos/kratos/v3/middleware"
 	"github.com/go-kratos/kratos/v3/middleware/logging"
 	"github.com/go-kratos/kratos/v3/middleware/recovery"
+	"github.com/go-kratos/kratos/v3/middleware/validate"
 	"github.com/go-kratos/kratos/v3/transport/http"
 	"github.com/google/uuid"
 	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
@@ -24,6 +25,7 @@ func NewHTTPServer(c *conf.Server, article *service.ArticleService, logger *slog
 			recovery.Recovery(),
 			NewTraceMiddleware(logger), // 在请求逻辑执行前打印日志，显示请求参数和追踪信息
 			logging.Server(logger),     // 在请求逻辑执行后打印日志，显示执行结果的错误码和状态码
+			validate.Validator(validateRequiredFields),
 		),
 	}
 	if c.Http.Network != "" {
