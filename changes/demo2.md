@@ -50,18 +50,20 @@ Code differences compared to source project.
  }
 ```
 
-## internal/biz/article.go (+17 -5)
+## internal/biz/article.go (+22 -5)
 
 ```diff
-@@ -6,6 +6,7 @@
+@@ -5,7 +5,9 @@
+ 	"errors"
  	"log/slog"
  
++	kratoserrors "github.com/go-kratos/kratos/v3/errors"
  	"github.com/yylego/kratos-ebz/ebzkratos"
 +	demo1student "github.com/yylego/kratos-examples/demo1kratos/api/student"
  	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
  	"github.com/yylego/kratos-examples/demo2kratos/internal/data"
  	"github.com/yylego/must"
-@@ -29,18 +30,19 @@
+@@ -29,18 +31,19 @@
  func (Article) TableName() string { return "articles" }
  
  type ArticleUsecase struct {
@@ -85,17 +87,21 @@ Code differences compared to source project.
  }
  
  func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Article, *ebzkratos.Ebz) {
-@@ -55,7 +57,17 @@
+@@ -55,7 +58,21 @@
  	// （它持 FOR UPDATE）在本事务提交前删除该学生，从而绝不会创建出指向
  	// "正在被删除的学生"的文章
  	res := &Article{Title: a.Title, Content: a.Content, StudentID: a.StudentID}
 -	err := uc.data.DB().WithContext(ctx).Transaction(func(db *gorm.DB) error {
 +
-+	// 跨服务调用 demo1kratos：trace ID 会通过 HTTP header 传播到对端，演示跨服务链路追踪
-+	resp, err := uc.demo1HttpClient.GetStudentClient().CreateStudent(ctx, &demo1student.CreateStudentRequest{
-+		Name: a.Title,
++	// Fetch the owning student via HTTP to show trace propagation, with no remote writes.
++	// 通过 HTTP 读取归属学生，演示 trace ID 传播，避免远程写入产生额外学生。
++	resp, err := uc.demo1HttpClient.GetStudentClient().GetStudent(ctx, &demo1student.GetStudentRequest{
++		Id: a.StudentID,
 +	})
 +	if err != nil {
++		if kratoserrors.IsNotFound(err) {
++			return nil, ebzkratos.New(pb.ErrorBadParam("student %d does not exist", a.StudentID))
++		}
 +		return nil, ebzkratos.New(pb.ErrorArticleCreateFailure("call demo1 over http: %v", err))
 +	}
 +	res.Content = res.Content + " [http-resp:" + resp.GetStudent().GetName() + "]"

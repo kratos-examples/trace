@@ -31,7 +31,7 @@ curl -fsS -H 'Content-Type: application/json' -H 'TRACE_ID: trace-http-demo' \
 
 两个服务的控制台应出现相同的 `request-trace=trace-http-demo`。追踪日志显示操作名、请求参数、状态码和耗时，demo2 的出站调用日志也携带同一个 ID。去掉 `TRACE_ID` 请求头再次创建文章，demo2 会生成 `TRACE-ID-<纳秒时间>-<UUID>-AAA`，demo1 收到的值应完全一致。带追踪头提交空学生名字，可在中间件日志中核对 400 校验失败也带有该 ID。
 
-原有跨服务示例会在 demo1 额外创建一个以文章标题命名的学生，并向文章内容追加 ` [http-resp:trace-article]`。额外学生不是文章归属的学生。HTTP 调用先于 demo2 的数据库归属校验，因此归属学生不存在时也可能留下额外学生。清理时，先用 `DELETE /students/$OWNER_ID` 删除归属学生并级联删除文章，再根据 demo1 对应 `created student` 日志中的 `id` 删除各个额外学生；不要按共用名字删除无关记录。
+跨服务调用改为通过 demo1 的 `GetStudent` 读取归属学生，并向文章内容追加 ` [http-resp:trace-owner]`。该调用不执行远程写入：归属学生不存在时返回 400 `BAD_PARAM`，不会新增学生；合法请求仍演示同一条 HTTP 追踪链路。数据库事务保留归属校验和 `FOR SHARE` 锁，防止 HTTP 读取后发生并发删除。清理时，用 `DELETE /students/$OWNER_ID` 删除归属学生并级联删除文章，无需再删除额外学生。
 
 中间件、日志提取、客户端接线及跨服务调用的完整差异见 [changes/demo1.md](changes/demo1.md) 和 [changes/demo2.md](changes/demo2.md)。在仓库根目录执行 `go test ./...` 重生成报告。
 

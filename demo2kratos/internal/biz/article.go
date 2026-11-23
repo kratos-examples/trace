@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 
+	kratoserrors "github.com/go-kratos/kratos/v3/errors"
 	"github.com/yylego/kratos-ebz/ebzkratos"
 	demo1student "github.com/yylego/kratos-examples/demo1kratos/api/student"
 	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
@@ -58,11 +59,15 @@ func (uc *ArticleUsecase) CreateArticle(ctx context.Context, a *Article) (*Artic
 	// "正在被删除的学生"的文章
 	res := &Article{Title: a.Title, Content: a.Content, StudentID: a.StudentID}
 
-	// 跨服务调用 demo1kratos：trace ID 会通过 HTTP header 传播到对端，演示跨服务链路追踪
-	resp, err := uc.demo1HttpClient.GetStudentClient().CreateStudent(ctx, &demo1student.CreateStudentRequest{
-		Name: a.Title,
+	// Fetch the owning student via HTTP to show trace propagation, with no remote writes.
+	// 通过 HTTP 读取归属学生，演示 trace ID 传播，避免远程写入产生额外学生。
+	resp, err := uc.demo1HttpClient.GetStudentClient().GetStudent(ctx, &demo1student.GetStudentRequest{
+		Id: a.StudentID,
 	})
 	if err != nil {
+		if kratoserrors.IsNotFound(err) {
+			return nil, ebzkratos.New(pb.ErrorBadParam("student %d does not exist", a.StudentID))
+		}
 		return nil, ebzkratos.New(pb.ErrorArticleCreateFailure("call demo1 over http: %v", err))
 	}
 	res.Content = res.Content + " [http-resp:" + resp.GetStudent().GetName() + "]"
